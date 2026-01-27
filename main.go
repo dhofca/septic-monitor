@@ -64,8 +64,7 @@ func saveLevelData(level float64) error {
 	return nil
 }
 
-// handlePOST handles POST requests
-func handlePOST(w http.ResponseWriter, r *http.Request) {
+func handleSaveLevelData(w http.ResponseWriter, r *http.Request) {
 	// Only allow POST method
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -100,6 +99,44 @@ func handlePOST(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
+func getLatestLevelData() (float64, error) {
+	rows, err := db.Query("SELECT level FROM level_data ORDER BY created_at DESC LIMIT 1")
+	if err != nil {
+		return 0, fmt.Errorf("failed to query database: %w", err)
+	}
+	defer rows.Close()
+
+	if rows.Next() {
+		var level float64
+		if err := rows.Scan(&level); err != nil {
+			return 0, fmt.Errorf("failed to scan level: %w", err)
+		}
+		return level, nil
+	}
+
+	return 0, fmt.Errorf("no level data found")
+}
+
+func handleGetLevelData(w http.ResponseWriter, r *http.Request) {
+	// Only allow GET method
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Get latest level data
+	levelData, err := getLatestLevelData()
+	if err != nil {
+		log.Printf("Error getting level data: %v", err)
+		http.Error(w, "Failed to get level data", http.StatusInternalServerError)
+		return
+	}
+
+	// Send response
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(levelData)
+}
+
 func main() {
 	// Initialize database
 	if err := initDB(); err != nil {
@@ -108,13 +145,14 @@ func main() {
 	defer db.Close()
 
 	// Register the POST endpoint
-	http.HandleFunc("/api", handlePOST)
+	http.HandleFunc("/api", handleSaveLevelData)
+	http.HandleFunc("/api/level", handleGetLevelData)
 
 	// Start server on port 8080
 	port := ":8080"
 	fmt.Printf("Server starting on port %s\n", port)
 	fmt.Println("POST endpoint available at: http://localhost:8080/api")
-	
+
 	if err := http.ListenAndServe(port, nil); err != nil {
 		log.Fatal(err)
 	}
