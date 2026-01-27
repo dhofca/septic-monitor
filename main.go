@@ -7,7 +7,11 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
+	"sync"
 	"time"
+
+	"sceptic-monitor/internal/sms"
 
 	"github.com/joho/godotenv"
 	_ "github.com/mattn/go-sqlite3"
@@ -24,7 +28,11 @@ type Response struct {
 	Message string `json:"message"`
 }
 
-var db *sql.DB
+var (
+	db              *sql.DB
+	lastNotifiedAt  time.Time
+	notificationMux sync.Mutex
+)
 
 // initDB initializes the database connection and creates the table
 func initDB() error {
@@ -66,6 +74,45 @@ func saveLevelData(level float64) error {
 	return nil
 }
 
+// checkAndNotify checks if level threshold is reached and sends SMS if needed
+func checkAndNotify(level float64) {
+	notificationMux.Lock()
+	defer notificationMux.Unlock()
+
+	// Get threshold from environment
+	thresholdStr := os.Getenv("LEVEL_THRESHOLD")
+	if thresholdStr == "" {
+		return // No threshold configured
+	}
+
+	threshold, err := strconv.ParseFloat(thresholdStr, 64)
+	if err != nil {
+		log.Printf("Invalid LEVEL_THRESHOLD value: %v", err)
+		return
+	}
+
+	// Check if level has reached or exceeded threshold
+	if level < threshold {
+		return // Level below threshold, no notification needed
+	}
+
+	// Prevent duplicate notifications within 1 hour
+	if time.Since(lastNotifiedAt) < time.Hour {
+		log.Printf("Notification already sent recently, skipping (level: %.2f, threshold: %.2f)", level, threshold)
+		return
+	}
+
+	// Send SMS notification
+	message := fmt.Sprintf("Alert: Level %.2f has reached the threshold of %.2f", level, threshold)
+	if err := sms.Send(message); err != nil {
+		log.Printf("Error sending SMS notification: %v", err)
+		return
+	}
+
+	lastNotifiedAt = time.Now()
+	log.Printf("SMS notification sent: level %.2f reached threshold %.2f", level, threshold)
+}
+
 func handleSaveLevelData(w http.ResponseWriter, r *http.Request) {
 	// Only allow POST method
 	if r.Method != http.MethodPost {
@@ -89,6 +136,9 @@ func handleSaveLevelData(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to save data", http.StatusInternalServerError)
 		return
 	}
+
+	// Check if level threshold is reached and send SMS notification
+	go checkAndNotify(req.Level)
 
 	// Create response
 	response := Response{
