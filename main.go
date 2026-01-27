@@ -54,9 +54,23 @@ func checkAndNotify(level float64) {
 		return // Level below threshold, no notification needed
 	}
 
-	// Prevent duplicate notifications within 1 hour
-	if time.Since(lastNotifiedAt) < time.Hour {
-		log.Printf("Notification already sent recently, skipping (level: %.2f, threshold: %.2f)", level, threshold)
+	// Get cooldown period from environment in minutes (default: 60 minutes = 1 hour)
+	cooldownMinutesStr := os.Getenv("SMS_COOLDOWN")
+	if cooldownMinutesStr == "" {
+		cooldownMinutesStr = "60" // Default to 60 minutes (1 hour)
+	}
+
+	cooldownMinutes, err := strconv.Atoi(cooldownMinutesStr)
+	if err != nil {
+		log.Printf("Invalid SMS_COOLDOWN value: %v, using default 60 minutes", err)
+		cooldownMinutes = 60
+	}
+
+	cooldown := time.Duration(cooldownMinutes) * time.Minute
+
+	// Prevent duplicate notifications within cooldown period
+	if time.Since(lastNotifiedAt) < cooldown {
+		log.Printf("Notification already sent recently, skipping (level: %.2f, threshold: %.2f, cooldown: %v)", level, threshold, cooldown)
 		return
 	}
 
