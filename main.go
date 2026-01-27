@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
+	"github.com/joho/godotenv"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -138,6 +140,13 @@ func handleGetLevelData(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	// Load environment variables from .env file
+	if err := godotenv.Load(); err != nil {
+		log.Println("No .env file found.")
+	}
+
+	port := os.Getenv("PORT")
+
 	// Initialize database
 	if err := initDB(); err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
@@ -148,10 +157,9 @@ func main() {
 	http.HandleFunc("/api", handleSaveLevelData)
 	http.HandleFunc("/api/level", handleGetLevelData)
 
-	// Start server on port 8080
-	port := ":8080"
+	// Start server
 	fmt.Printf("Server starting on port %s\n", port)
-	fmt.Println("POST endpoint available at: http://localhost:8080/api")
+	fmt.Printf("POST endpoint available at: http://localhost%s/api\n", port)
 
 	if err := http.ListenAndServe(port, nil); err != nil {
 		log.Fatal(err)
