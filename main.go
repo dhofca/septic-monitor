@@ -150,6 +150,9 @@ func main() {
 	}
 
 	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
 
 	// Initialize database
 	if err := db.Init(); err != nil {
@@ -162,10 +165,10 @@ func main() {
 	http.HandleFunc("/api/level", handleGetLevelData)
 
 	// Start server
-	fmt.Printf("Server starting on port %s\n", port)
-	fmt.Printf("POST endpoint available at: http://localhost%s/api\n", port)
+	fmt.Printf("Server starting on port :%s\n", port)
+	fmt.Printf("POST endpoint available at: http://localhost:%s/api\n", port)
 
-	if err := http.ListenAndServe(port, nil); err != nil {
+	if err := http.ListenAndServe(":"+port, nil); err != nil {
 		log.Fatal(err)
 	}
 }
